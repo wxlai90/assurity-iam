@@ -14,8 +14,6 @@ const msalConfig = {
   },
 };
 
-const cca = new ConfidentialClientApplication(msalConfig);
-
 const logError = (message: string, error: unknown) => {
   logger.error(`${message}: ${JSON.stringify(error)}`);
 };
@@ -25,6 +23,8 @@ export const getAccessToken = async (): Promise<string | null> => {
     return cachedResult.accessToken;
 
   try {
+    const cca = new ConfidentialClientApplication(msalConfig);
+
     const result = await cca.acquireTokenByClientCredential({
       scopes: ["https://graph.microsoft.com/.default"],
     });
@@ -75,7 +75,7 @@ export const listAllSecurityGroups = async () => {
     return response.value;
   } catch (error) {
     logError("Error getting security groups", error);
-    throw new Error("Error getting groups from Microsoft Graph");
+    return null;
   }
 };
 
@@ -92,10 +92,6 @@ export const getSecurityGroupById = async (
 
     return group;
   } catch (error) {
-    if (error && (error as any).statusCode === 404) {
-      logger.warn(`Security Group with ID ${groupId} not found.`);
-      return null;
-    }
     logError(`Error getting security group with ID ${groupId}`, error);
     return null;
   }
@@ -131,7 +127,7 @@ export const listAllUsers = async () => {
     return response.value;
   } catch (error) {
     logError("Error getting users with security groups", error);
-    throw new Error("Error getting users from Microsoft Graph");
+    return null;
   }
 };
 
