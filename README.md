@@ -81,6 +81,10 @@ After the Docker containers are up and running, you can test the following endpo
 
 - **GET** `/api/v1/groups/db`: Fetch all security groups stored in MongoDB.
 
+- **GET** `/api/v1/users`: Fetch all users.
+
+- **GET** `/api/v1/users/:userId/groups`: Fetch all security groups for a partciular userId.
+
 ### MongoDB
 
 - The MongoDB instance runs in the background via Docker and is connected to the Node.js app using the `MONGO_URI` variable from the `.env` file.
