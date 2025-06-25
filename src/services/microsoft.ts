@@ -29,17 +29,17 @@ export const getAccessToken = async (): Promise<string | null> => {
       scopes: ["https://graph.microsoft.com/.default"],
     });
 
-    if (result?.accessToken && result.expiresOn) {
+    if (result && result.accessToken && result.expiresOn) {
       cachedResult = {
         accessToken: result.accessToken,
         expiresOn: result.expiresOn,
       };
 
       return cachedResult.accessToken;
-    } else {
-      logError("Failed to get access token", result);
-      return null;
     }
+
+    logError("Failed to get access token", result);
+    return null;
   } catch (error) {
     logError("Error getting access token:", error);
     return null;

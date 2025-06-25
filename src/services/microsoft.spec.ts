@@ -226,7 +226,7 @@ describe("#getSecurityGroupsOfUserByID", () => {
   });
 });
 
-describe("listAllUsers", () => {
+describe("#listAllUsers", () => {
   beforeAll(() => {
     const mockAcquireTokenByClientCredential = jest.fn().mockResolvedValue({
       accessToken: "mocked-access-token",
@@ -259,7 +259,7 @@ describe("listAllUsers", () => {
     expect(mockGraphClient.get).toHaveBeenCalledTimes(1);
   });
 
-  it("should handle errors and throw", async () => {
+  it("should handle errors and return null", async () => {
     const mockGraphClient = {
       api: jest.fn().mockReturnThis(),
       get: jest.fn().mockRejectedValue(new Error("API request failed")),
@@ -267,16 +267,14 @@ describe("listAllUsers", () => {
 
     (Client.init as jest.Mock).mockReturnValue(mockGraphClient);
 
-    try {
-      await microsoftService.listAllUsers();
-    } catch (error) {
-      //   expect(error.message).toBe("Error getting users from Microsoft Graph");
-    }
+    const users = await microsoftService.listAllUsers();
+
+    expect(users).toBeNull();
     expect(mockGraphClient.get).toHaveBeenCalledTimes(1);
   });
 });
 
-describe("getSecurityGroupsFromDB", () => {
+describe("#getSecurityGroupsFromDB", () => {
   beforeAll(() => {
     const mockAcquireTokenByClientCredential = jest.fn().mockResolvedValue({
       accessToken: "mocked-access-token",
