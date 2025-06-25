@@ -12,7 +12,7 @@ Before you can run the application, make sure you have the following installed:
 
 ### Environment Variables
 
-Make sure to set the following environment variables in your `.env` file:
+Sample environment variables in `.env`:
 
 ```
 CLIENT_ID=<client-id>
@@ -22,7 +22,7 @@ MONGO_URI=mongodb://mongo:27017/<db_name>
 PORT=5000
 ```
 
-These values can be obtained by registering an application in Azure Entra ID (Azure AD) and configuring Microsoft Graph API.
+These values can be obtained by registering an application in Azure Entra ID (Azure AD) and configuring Microsoft Graph API. Optionally, there is a sample .env.sample file included that can be used.
 
 ## Installation
 
@@ -143,3 +143,11 @@ Run the tests with
 ```bash
 npm run test
 ```
+
+To see test coverage, run the test with
+
+```bash
+npm run test:coverage
+```
+
+Coverage report can be located at `coverage/lcov-report/index.html`
