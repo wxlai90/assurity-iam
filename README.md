@@ -6,9 +6,12 @@ This is a simple Node.js application that connects to Microsoft Graph API to fet
 
 Before you can run the application, make sure you have the following installed:
 
-- Node.js (v18 or later)
 - Docker and Docker Compose
-- MongoDB instance (if not using Docker)
+
+Additionally, to run without docker/dev mode:
+
+- Node.js is required
+- MongoDB instance
 
 ### Environment Variables
 
@@ -22,23 +25,15 @@ MONGO_URI=mongodb://mongo:27017/<db_name>
 PORT=5000
 ```
 
-These values can be obtained by registering an application in Azure Entra ID (Azure AD) and configuring Microsoft Graph API. Optionally, there is a sample .env.sample file included that can be used.
+These values can be obtained by registering an application in Azure Entra ID (Azure AD) and configuring Microsoft Graph API. Additionally, there is a **sample `.env` file** included that can be used.
 
-## Installation
+## Setup
 
 1. **Clone the repository**:
 
    ```bash
    git clone https://github.com/wxlai90/assurity-iam.git
    cd assurity-iam
-   ```
-
-2. **Install dependencies**:
-
-   Since Docker handles the installation of dependencies, there's no need to manually install them. However, if you wish to run the app locally without Docker:
-
-   ```bash
-   npm install
    ```
 
 ## Docker Setup
@@ -77,7 +72,7 @@ After the Docker containers are up and running, you can test the following endpo
 
 - **GET** `/api/v1/groups`: Fetch all security groups.
 
-- **GET** `/api/v1/groups/{groupId}`: Fetch a security group by ID.
+- **GET** `/api/v1/groups/{groupId}/details`: Fetch a security group by ID.
 
 - **GET** `/api/v1/groups/db`: Fetch all security groups stored in MongoDB.
 
@@ -113,6 +108,11 @@ After the Docker containers are up and running, you can test the following endpo
 1. **Run in development mode**:
 
    If you'd like to run the app in development mode without Docker:
+
+   ```bash
+   # install dependencies
+   npm install
+   ```
 
    ```bash
    npm run dev

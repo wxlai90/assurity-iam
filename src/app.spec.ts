@@ -13,7 +13,7 @@ jest.mock("./utils/logger", () => ({
 
 jest
   .spyOn(microsoft, "listAllSecurityGroups")
-  .mockResolvedValue([{ id: "1", name: "a", securityEnabled: true }]);
+  .mockResolvedValue([{ id: "1", displayName: "a", securityEnabled: true }]);
 
 jest.mock("./models/SecurityGroup");
 
@@ -33,14 +33,16 @@ describe("#app", () => {
         {
           updateOne: {
             filter: { id: "1" },
-            update: { $set: { id: "1", name: "a", securityEnabled: true } },
+            update: {
+              $set: { id: "1", displayName: "a", securityEnabled: true },
+            },
             upsert: true,
           },
         },
       ]);
       expect(response.body.success).toBe(true);
       expect(response.body.data).toEqual([
-        { id: "1", name: "a", securityEnabled: true },
+        { id: "1", displayName: "a", securityEnabled: true },
       ]);
     });
 
@@ -66,7 +68,9 @@ describe("#app", () => {
     it("should return error if there were errors saving to db", async () => {
       jest
         .spyOn(microsoft, "listAllSecurityGroups")
-        .mockResolvedValue([{ id: "1", name: "a", securityEnabled: true }]);
+        .mockResolvedValue([
+          { id: "1", displayName: "a", securityEnabled: true },
+        ]);
 
       const spy = jest
         .spyOn(SecurityGroupModel, "bulkWrite")
@@ -81,7 +85,9 @@ describe("#app", () => {
         {
           updateOne: {
             filter: { id: "1" },
-            update: { $set: { id: "1", name: "a", securityEnabled: true } },
+            update: {
+              $set: { id: "1", displayName: "a", securityEnabled: true },
+            },
             upsert: true,
           },
         },
@@ -97,7 +103,7 @@ describe("#app", () => {
       jest
         .spyOn(microsoft, "getSecurityGroupsFromDB")
         .mockResolvedValue([
-          { id: "1", name: "a", securityEnabled: true } as any,
+          { id: "1", displayName: "a", securityEnabled: true } as any,
         ]);
 
       const response = await request(app)
@@ -107,7 +113,7 @@ describe("#app", () => {
 
       expect(response.body.success).toBe(true);
       expect(response.body.data).toEqual([
-        { id: "1", name: "a", securityEnabled: true },
+        { id: "1", displayName: "a", securityEnabled: true },
       ]);
     });
 
@@ -147,7 +153,7 @@ describe("#app", () => {
       jest
         .spyOn(microsoft, "getSecurityGroupById")
         .mockResolvedValue([
-          { id: "1", name: "a", securityEnabled: true },
+          { id: "1", displayName: "a", securityEnabled: true },
         ] as MicrosoftGraph.Group);
 
       const response = await request(app)
@@ -157,7 +163,7 @@ describe("#app", () => {
 
       expect(response.body.success).toBe(true);
       expect(response.body.data).toEqual([
-        { id: "1", name: "a", securityEnabled: true },
+        { id: "1", displayName: "a", securityEnabled: true },
       ]);
       expect(response.body.message).toBeNull();
     });
@@ -197,7 +203,7 @@ describe("#app", () => {
     it("should return users with 200 status", async () => {
       jest
         .spyOn(microsoft, "listAllUsers")
-        .mockResolvedValue([{ id: "1", name: "a" }]);
+        .mockResolvedValue([{ id: "1", displayName: "a" }]);
 
       const response = await request(app)
         .get("/api/v1/users")
@@ -205,7 +211,7 @@ describe("#app", () => {
         .expect(200);
 
       expect(response.body.success).toBe(true);
-      expect(response.body.data).toEqual([{ id: "1", name: "a" }]);
+      expect(response.body.data).toEqual([{ id: "1", displayName: "a" }]);
     });
 
     it("should return error when unable to get users", async () => {

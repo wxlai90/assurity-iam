@@ -3,18 +3,45 @@ process.env.CLIENT_SECRET = "mock-client-secret";
 process.env.TENANT_ID = "mock-tenant-id";
 
 import { ConfidentialClientApplication } from "@azure/msal-node";
-import { Client } from "@microsoft/microsoft-graph-client";
+import { Client, GraphRequest } from "@microsoft/microsoft-graph-client";
 import SecurityGroupModel from "../models/SecurityGroup";
 import * as microsoftService from "./microsoft";
 
+const successTokenMock = jest.fn().mockResolvedValue({
+  accessToken: "mocked-access-token",
+  expiresOn: new Date(new Date().getTime() + 3600 * 1000),
+});
+const failedTokenMock = jest
+  .fn()
+  .mockRejectedValue(new Error("failed to get access token"));
+
+let currentTokenMock = successTokenMock;
+
 jest.mock("@azure/msal-node", () => ({
-  ConfidentialClientApplication: jest.fn(),
+  ConfidentialClientApplication: jest.fn().mockImplementation(() => {
+    return {
+      acquireTokenByClientCredential: currentTokenMock,
+    };
+  }),
+}));
+
+let apiFn = jest.fn(() => ({
+  filter: jest.fn(),
 }));
 
 jest.mock("@microsoft/microsoft-graph-client", () => ({
   Client: {
-    init: jest.fn(),
+    init: jest.fn(() => ({
+      api: apiFn,
+    })),
   },
+  PageIterator: jest.fn().mockImplementation((client, response, callback) => {
+    return {
+      iterate: async () => {
+        response.value.forEach(callback);
+      },
+    };
+  }),
 }));
 
 jest.mock("../models/SecurityGroup", () => ({
@@ -28,69 +55,100 @@ jest.mock("../utils/logger", () => ({
 
 describe("#getAccessToken", () => {
   it("should return null if get token fails", async () => {
-    const mockAcquireTokenByClientCredential = jest
-      .fn()
-      .mockRejectedValue(new Error("failed to get token"));
-
-    const mockCcaInstance = {
-      acquireTokenByClientCredential: mockAcquireTokenByClientCredential,
-    };
-
-    (ConfidentialClientApplication as jest.Mock).mockImplementation(
-      () => mockCcaInstance
-    );
-
+    currentTokenMock = failedTokenMock;
     const token = await microsoftService.getAccessToken();
 
     expect(token).toBeNull();
-    expect(mockAcquireTokenByClientCredential).toHaveBeenCalledTimes(1);
+    expect(failedTokenMock).toHaveBeenCalledTimes(1);
   });
 
   it("should return an access token", async () => {
-    const mockAcquireTokenByClientCredential = jest.fn().mockResolvedValue({
-      accessToken: "mocked-access-token",
-      expiresOn: new Date(new Date().getTime() + 3600 * 1000),
-    });
-
-    const mockCcaInstance = {
-      acquireTokenByClientCredential: mockAcquireTokenByClientCredential,
-    };
-
-    (ConfidentialClientApplication as jest.Mock).mockImplementation(
-      () => mockCcaInstance
-    );
-
+    currentTokenMock = successTokenMock;
     const token = await microsoftService.getAccessToken();
 
     expect(token).toBe("mocked-access-token");
-    expect(mockAcquireTokenByClientCredential).toHaveBeenCalledTimes(1);
+    expect(successTokenMock).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe("#getAllItems", () => {
+  it("should return all items when the graph request is successful", async () => {
+    const client = {
+      init: jest.fn(() => ({
+        api: jest.fn(() => {}),
+      })),
+    } as unknown as Client;
+
+    const graphRequest = {
+      get: jest.fn().mockResolvedValue({
+        value: [1, 2, 3],
+        "@odata.nextLink":
+          "https://graph.microsoft.com/v1.0/users?$top=5&$skiptoken=RFNwdAIAAQAAAD8...AAAAAAAA",
+      }),
+    } as unknown as GraphRequest;
+
+    const result = await microsoftService.getAllItems(client, graphRequest);
+    expect(result).toEqual([1, 2, 3]);
+  });
+
+  it("should return empty array when no items are returned", async () => {
+    const client = {
+      init: jest.fn(() => ({
+        api: jest.fn(() => {}),
+      })),
+    } as unknown as Client;
+
+    const graphRequest = {
+      get: jest.fn().mockResolvedValue({
+        value: [],
+      }),
+    } as unknown as GraphRequest;
+
+    const result = await microsoftService.getAllItems(client, graphRequest);
+
+    expect(result).toEqual([]);
+    expect(result).toEqual([]);
+  });
+
+  it("should handle errors and return null", async () => {
+    const client = {
+      init: jest.fn(() => ({
+        api: jest.fn(() => {}),
+      })),
+    } as unknown as Client;
+
+    const graphRequest = {
+      get: jest.fn().mockRejectedValue(new Error("api call failed")),
+    } as unknown as GraphRequest;
+
+    const result = await microsoftService.getAllItems(client, graphRequest);
+
+    expect(result).toBeNull();
   });
 });
 
 describe("#listAllSecurityGroups", () => {
+  currentTokenMock = successTokenMock;
+
   it("should return listing of security groups", async () => {
-    const mockAcquireTokenByClientCredential = jest.fn().mockResolvedValue({
-      accessToken: "mocked-access-token",
-      expiresOn: new Date(new Date().getTime() + 3600 * 1000),
-    });
-
-    const mockCcaInstance = {
-      acquireTokenByClientCredential: mockAcquireTokenByClientCredential,
-    };
-
-    (ConfidentialClientApplication as jest.Mock).mockImplementation(
-      () => mockCcaInstance
-    );
-
-    const mockSecurityGroups = [
+    const mockGroup = [
       { id: "1", name: "Group 1" },
       { id: "2", name: "Group 2" },
     ];
 
-    const mockGet = jest.fn().mockResolvedValue({ value: mockSecurityGroups });
-    const mockFilter = jest.fn().mockReturnValue({ get: mockGet });
-    const mockApi = jest.fn().mockReturnValue({ filter: mockFilter });
-    (Client.init as jest.Mock).mockReturnValue({ api: mockApi });
+    jest.mock("@azure/msal-node", () => {
+      return {
+        ConfidentialClientApplication: jest.fn().mockImplementation(() => {
+          return {
+            acquireTokenByClientCredential: successTokenMock,
+          };
+        }),
+      };
+    });
+
+    const spy = jest
+      .spyOn(microsoftService, "getAllItems")
+      .mockResolvedValue(mockGroup);
 
     const groups = await microsoftService.listAllSecurityGroups();
 
@@ -98,43 +156,31 @@ describe("#listAllSecurityGroups", () => {
       { id: "1", name: "Group 1" },
       { id: "2", name: "Group 2" },
     ]);
-    expect(mockApi).toHaveBeenCalledWith("/groups/microsoft.graph.group");
-    expect(mockApi).toHaveBeenCalledTimes(1);
+    expect(microsoftService.getAllItems).toHaveBeenCalledTimes(1);
+    spy.mockReset();
   });
 
   it("should handle errors and return null", async () => {
-    const mockGet = jest.fn().mockRejectedValue(new Error("API call failed"));
-    const mockFilter = jest.fn().mockReturnValue({ get: mockGet });
-    const mockApi = jest.fn().mockReturnValue({ filter: mockFilter });
+    apiFn = jest.fn(() => ({
+      filter: jest.fn(() => ({
+        get: jest.fn().mockRejectedValue(new Error("API call failed")),
+      })),
+    }));
 
-    (Client.init as jest.Mock).mockReturnValue({ api: mockApi });
+    const spy = jest
+      .spyOn(microsoftService, "getAllItems")
+      .mockRejectedValue(new Error("API call failed"));
 
     const groups = await microsoftService.listAllSecurityGroups();
 
     expect(groups).toBeNull();
-    expect(mockApi).toHaveBeenCalledWith("/groups/microsoft.graph.group");
-    expect(mockApi).toHaveBeenCalledTimes(1);
-    expect(mockFilter).toHaveBeenCalledWith("securityEnabled eq true");
-    expect(mockFilter).toHaveBeenCalledTimes(1);
-    expect(mockGet).toHaveBeenCalledTimes(1);
+    expect(microsoftService.getAllItems).toHaveBeenCalledTimes(1);
+    spy.mockReset();
   });
 });
 
 describe("#getSecurityGroupById", () => {
   it("should return a group if found", async () => {
-    const mockAcquireTokenByClientCredential = jest.fn().mockResolvedValue({
-      accessToken: "mocked-access-token",
-      expiresOn: new Date(new Date().getTime() + 3600 * 1000),
-    });
-
-    const mockCcaInstance = {
-      acquireTokenByClientCredential: mockAcquireTokenByClientCredential,
-    };
-
-    (ConfidentialClientApplication as jest.Mock).mockImplementation(
-      () => mockCcaInstance
-    );
-
     const mockGroup = { id: "1", name: "Group 1" };
     const mockGet = jest.fn().mockResolvedValue(mockGroup);
     const mockApi = jest.fn().mockReturnValue({ get: mockGet });
@@ -166,20 +212,11 @@ describe("#getSecurityGroupById", () => {
 });
 
 describe("#getSecurityGroupsOfUserByID", () => {
+  beforeEach(() => {
+    jest.resetAllMocks();
+  });
+
   it("should return a list of security groups for a user", async () => {
-    const mockAcquireTokenByClientCredential = jest.fn().mockResolvedValue({
-      accessToken: "mocked-access-token",
-      expiresOn: new Date(new Date().getTime() + 3600 * 1000),
-    });
-
-    const mockCcaInstance = {
-      acquireTokenByClientCredential: mockAcquireTokenByClientCredential,
-    };
-
-    (ConfidentialClientApplication as jest.Mock).mockImplementation(
-      () => mockCcaInstance
-    );
-
     const mockSecurityGroups = [{ id: "1", displayName: "Group 1" }];
 
     const mockGet = jest.fn().mockResolvedValue({ value: mockSecurityGroups });
@@ -190,17 +227,17 @@ describe("#getSecurityGroupsOfUserByID", () => {
 
     (Client.init as jest.Mock).mockReturnValue({ api: mockApi });
 
+    jest
+      .spyOn(microsoftService, "getAllItems")
+      .mockResolvedValue(mockSecurityGroups);
+
     const groups = await microsoftService.getSecurityGroupsOfUserByID("userId");
 
     expect(groups).toEqual(mockSecurityGroups);
-    expect(mockApi).toHaveBeenCalledWith(
-      "/users/userId/memberOf/microsoft.graph.group"
-    );
-    expect(mockApi).toHaveBeenCalledTimes(1);
+    expect(microsoftService.getAllItems).toHaveBeenCalledTimes(1);
     expect(mockHeader).toHaveBeenCalledWith("ConsistencyLevel", "eventual");
     expect(mockCount).toHaveBeenCalledWith(true);
     expect(mockFilter).toHaveBeenCalledWith("securityEnabled eq true");
-    expect(mockGet).toHaveBeenCalledTimes(1);
   });
 
   it("should handle errors and return null", async () => {
@@ -212,6 +249,10 @@ describe("#getSecurityGroupsOfUserByID", () => {
 
     (Client.init as jest.Mock).mockReturnValue({ api: mockApi });
 
+    jest
+      .spyOn(microsoftService, "getAllItems")
+      .mockRejectedValue(new Error("api call failed"));
+
     const groups = await microsoftService.getSecurityGroupsOfUserByID("userId");
 
     expect(groups).toBeNull();
@@ -219,10 +260,10 @@ describe("#getSecurityGroupsOfUserByID", () => {
       "/users/userId/memberOf/microsoft.graph.group"
     );
     expect(mockApi).toHaveBeenCalledTimes(1);
+    expect(microsoftService.getAllItems).toHaveBeenCalledTimes(1);
     expect(mockHeader).toHaveBeenCalledWith("ConsistencyLevel", "eventual");
     expect(mockCount).toHaveBeenCalledWith(true);
     expect(mockFilter).toHaveBeenCalledWith("securityEnabled eq true");
-    expect(mockGet).toHaveBeenCalledTimes(1);
   });
 });
 
@@ -242,6 +283,10 @@ describe("#listAllUsers", () => {
     );
   });
 
+  beforeEach(() => {
+    jest.resetAllMocks();
+  });
+
   it("should return a list of users", async () => {
     const mockGraphClient = {
       api: jest.fn().mockReturnThis(),
@@ -252,25 +297,48 @@ describe("#listAllUsers", () => {
 
     (Client.init as jest.Mock).mockReturnValue(mockGraphClient);
 
+    jest
+      .spyOn(microsoftService, "getAllItems")
+      .mockResolvedValue([{ id: "1", displayName: "User 1" }]);
+
     const users = await microsoftService.listAllUsers();
 
     expect(users).toEqual([{ id: "1", displayName: "User 1" }]);
+    expect(microsoftService.getAllItems).toHaveBeenCalledTimes(1);
     expect(mockGraphClient.api).toHaveBeenCalledWith("/users");
-    expect(mockGraphClient.get).toHaveBeenCalledTimes(1);
   });
 
   it("should handle errors and return null", async () => {
-    const mockGraphClient = {
-      api: jest.fn().mockReturnThis(),
-      get: jest.fn().mockRejectedValue(new Error("API request failed")),
+    const mockAcquireTokenByClientCredential = jest.fn().mockResolvedValue({
+      accessToken: "mocked-access-token",
+      expiresOn: new Date(new Date().getTime() + 3600 * 1000),
+    });
+
+    const mockCcaInstance = {
+      acquireTokenByClientCredential: mockAcquireTokenByClientCredential,
     };
 
+    (ConfidentialClientApplication as jest.Mock).mockImplementation(
+      () => mockCcaInstance
+    );
+
+    const mockGet = jest.fn().mockResolvedValue([]);
+    const mockApi = jest.fn().mockReturnValue({ get: mockGet });
+
+    const mockGraphClient = { api: mockApi };
     (Client.init as jest.Mock).mockReturnValue(mockGraphClient);
+
+    jest
+      .spyOn(microsoftService, "getAllItems")
+      .mockRejectedValue(new Error("API call failed"));
 
     const users = await microsoftService.listAllUsers();
 
     expect(users).toBeNull();
-    expect(mockGraphClient.get).toHaveBeenCalledTimes(1);
+    expect(microsoftService.getAllItems).toHaveBeenCalledTimes(1);
+    expect(microsoftService.getAllItems).toHaveBeenCalledWith(mockGraphClient, {
+      get: mockGet,
+    });
   });
 });
 

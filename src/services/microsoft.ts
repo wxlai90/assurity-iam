@@ -1,5 +1,10 @@
 import { ConfidentialClientApplication } from "@azure/msal-node";
-import { Client } from "@microsoft/microsoft-graph-client";
+import {
+  Client,
+  GraphRequest,
+  PageIterator,
+  PageIteratorCallback,
+} from "@microsoft/microsoft-graph-client";
 import * as MicrosoftGraph from "@microsoft/microsoft-graph-types";
 import SecurityGroupModel from "../models/SecurityGroup";
 import logger from "../utils/logger";
@@ -62,17 +67,44 @@ const getGraphClient = async (): Promise<Client | null> => {
   return client;
 };
 
+// https://learn.microsoft.com/en-us/graph/sdks/paging?tabs=typescript
+export const getAllItems = async <T>(
+  client: Client,
+  graphRequest: GraphRequest
+): Promise<T[] | null> => {
+  const results: T[] = [];
+  const callback: PageIteratorCallback = (message: T) => {
+    results.push(message);
+    return true;
+  };
+
+  try {
+    const response = await graphRequest.get();
+    const pageIterator = new PageIterator(client, response, callback);
+
+    await pageIterator.iterate();
+    return results;
+  } catch (error) {
+    logger.error(`Error getting items from graph api`, error);
+    return null;
+  }
+};
+
 export const listAllSecurityGroups = async () => {
   const client = await getGraphClient();
   if (!client) return null;
 
   try {
-    const response = await client
+    const graphRequest = await client
       .api("/groups/microsoft.graph.group")
-      .filter("securityEnabled eq true")
-      .get();
+      .filter("securityEnabled eq true");
 
-    return response.value;
+    const results = await getAllItems<MicrosoftGraph.Group>(
+      client,
+      graphRequest
+    );
+
+    return results;
   } catch (error) {
     logError("Error getting security groups", error);
     return null;
@@ -104,27 +136,36 @@ export const getSecurityGroupsOfUserByID = async (
   if (!client) return null;
 
   try {
-    const securityGroups = await client
+    const graphRequest = client
       .api(`/users/${userId}/memberOf/microsoft.graph.group`)
       .header("ConsistencyLevel", "eventual")
       .count(true)
-      .filter("securityEnabled eq true")
-      .get();
+      .filter("securityEnabled eq true");
 
-    return securityGroups.value;
+    const results = await getAllItems<MicrosoftGraph.Group>(
+      client,
+      graphRequest
+    );
+
+    return results;
   } catch (error) {
     logError(`Error getting security groups for user ${userId}`, error);
     return null;
   }
 };
 
-export const listAllUsers = async () => {
+export const listAllUsers = async (): Promise<MicrosoftGraph.User[] | null> => {
   const client = await getGraphClient();
   if (!client) return null;
 
   try {
-    const response = await client.api("/users").get();
-    return response.value;
+    const graphRequest = client.api("/users");
+    const results = await getAllItems<MicrosoftGraph.User>(
+      client,
+      graphRequest
+    );
+
+    return results;
   } catch (error) {
     logError("Error getting users with security groups", error);
     return null;
